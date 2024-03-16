@@ -14,5 +14,6 @@ Arguments:
 
 Options:
   -o, --out <out-dir>  Directory to export to (default: ".")
+  --no-blobs           Disable exporting blobs
   -h, --help           display help for command
 ```

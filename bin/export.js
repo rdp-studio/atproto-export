@@ -17,10 +17,13 @@ program
     .description("Tool to export your ATProto account")
     .argument("<handle-or-did>", "Handle or DID to export")
     .option("-o, --out <out-dir>", "Directory to export to", ".")
+    .option("--no-blobs", "Disable exporting blobs")
 
 program.parse()
 const handleOrDid = program.args[0]
-const distDir = program.opts().out
+const options = program.opts()
+const distDir = options.out
+const exportBlobs = options.blobs
 
 const exportRepo = async (repoBytes, did) => {
     const car = await readCarWithRoot(repoBytes)
@@ -39,6 +42,7 @@ const exportRepo = async (repoBytes, did) => {
         } catch { }
         fs.writeFileSync(path.join(distDir, did, write.collection, `${write.rkey}.json`), JSON.stringify(parsed.record))
     }
+    fs.writeFileSync(path.join(distDir, did, "repo.car"), repoBytes)
 }
 
 const run = async () => {
@@ -85,30 +89,32 @@ const run = async () => {
     console.log("Exporting repo...")
     await exportRepo(repoBuffer, safeDid)
 
-    console.log("Downloading blobs...")
-    try {
-        fs.mkdirSync(path.join(distDir, safeDid, "_blobs"))
-    } catch { }
-    const blobList = await agent.api.com.atproto.sync.listBlobs({
-        did,
-        limit: 500
-    })
-    if (!blobList.success) {
-        console.error(`Could not get blob list`)
-        process.exit(1)
-    }
-    for (const cidIndex in blobList.data.cids) {
-        const cid = blobList.data.cids[cidIndex]
-        console.log(`Downloading ${cid} (${parseInt(cidIndex) + 1} / ${blobList.data.cids.length})`)
-        const blob = await agent.api.com.atproto.sync.getBlob({
+    if (exportBlobs) {
+        console.log("Downloading blobs...")
+        try {
+            fs.mkdirSync(path.join(distDir, safeDid, "_blobs"))
+        } catch { }
+        const blobList = await agent.api.com.atproto.sync.listBlobs({
             did,
-            cid
+            limit: 500
         })
-        if (!blob.success) {
-            console.error(`Could not get blob ${cid}, skipping`)
-            continue
+        if (!blobList.success) {
+            console.error(`Could not get blob list`)
+            process.exit(1)
         }
-        fs.writeFileSync(path.join(distDir, safeDid, "_blobs", cid), blob.data)
+        for (const cidIndex in blobList.data.cids) {
+            const cid = blobList.data.cids[cidIndex]
+            console.log(`Downloading ${cid} (${parseInt(cidIndex) + 1} / ${blobList.data.cids.length})`)
+            const blob = await agent.api.com.atproto.sync.getBlob({
+                did,
+                cid
+            })
+            if (!blob.success) {
+                console.error(`Could not get blob ${cid}, skipping`)
+                continue
+            }
+            fs.writeFileSync(path.join(distDir, safeDid, "_blobs", cid), blob.data)
+        }
     }
 
     console.log("Done!")
